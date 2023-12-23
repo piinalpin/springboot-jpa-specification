@@ -1,12 +1,14 @@
 package com.piinalpin.queryrequest.domain.common.query;
 
+import com.piinalpin.queryrequest.Exception.InvalidDataTypeException;
+import com.piinalpin.queryrequest.Exception.KeyNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 
-import javax.persistence.criteria.CriteriaBuilder;
-import javax.persistence.criteria.Expression;
-import javax.persistence.criteria.Predicate;
-import javax.persistence.criteria.Root;
-import javax.persistence.criteria.Path;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Path;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -15,7 +17,7 @@ public enum Operator {
 
     EQUAL {
         public <T> Predicate build(Root<T> root, CriteriaBuilder cb, FilterRequest request, Predicate predicate) {
-            Object value = request.getFieldType().parse(request.getValue().toString());
+            Object value = parseValue(request,false);
             Expression<?> key = this.getPath(root, request);
             return cb.and(cb.equal(key, value), predicate);
         }
@@ -23,7 +25,7 @@ public enum Operator {
 
     NOT_EQUAL {
         public <T> Predicate build(Root<T> root, CriteriaBuilder cb, FilterRequest request, Predicate predicate) {
-            Object value = request.getFieldType().parse(request.getValue().toString());
+            Object value = parseValue(request,false);
             Expression<?> key = this.getPath(root, request);
             return cb.and(cb.notEqual(key, value), predicate);
         }
@@ -32,7 +34,7 @@ public enum Operator {
     LIKE {
         public <T> Predicate build(Root<T> root, CriteriaBuilder cb, FilterRequest request, Predicate predicate) {
             Expression<String> key = this.getPath(root, request);
-            return cb.and(cb.like(cb.upper(key), "%" + request.getValue().toString().toUpperCase() + "%"), predicate);
+            return cb.and(cb.like(cb.upper(key), "%" +  parseValue(request,true) + "%"), predicate);
         }
     },
 
@@ -41,7 +43,7 @@ public enum Operator {
             List<Object> values = request.getValues();
             CriteriaBuilder.In<Object> inClause = cb.in(this.getPath(root, request));
             for (Object value : values) {
-                inClause.value(request.getFieldType().parse(value.toString()));
+                inClause.value(parseValue(request,false));
             }
             return cb.and(inClause, predicate);
         }
@@ -49,8 +51,8 @@ public enum Operator {
 
     BETWEEN {
         public <T> Predicate build(Root<T> root, CriteriaBuilder cb, FilterRequest request, Predicate predicate) {
-            Object value = request.getFieldType().parse(request.getValue().toString());
-            Object valueTo = request.getFieldType().parse(request.getValueTo().toString());
+            Object value = parseValue(request,false);
+            Object valueTo = parseValueTo(request);
             if (request.getFieldType() == FieldType.DATE) {
                 LocalDateTime startDate = (LocalDateTime) value;
                 LocalDateTime endDate = (LocalDateTime) valueTo;
@@ -72,14 +74,31 @@ public enum Operator {
 
     public abstract <T> Predicate build(Root<T> root, CriteriaBuilder cb, FilterRequest request, Predicate predicate);
 
-    //with this piece of code I can use nested properties on my entities.
     public <T,V> Path<V> getPath(Root<T> root, FilterRequest request) {
-        String [] keys = request.getKey().split("\\.");
-        Path<V> path = root.get(keys[0]);
-        for (int i = 1; i < keys.length; i++) {
-            path = path.get(keys[i]);
+        try {
+            return root.get(request.getKey());
+        }catch (Exception e){
+            throw new KeyNotFoundException();
         }
-        return path;
+    }
+
+    public Object parseValue(FilterRequest request ,boolean upperCase){
+        try {
+            if (upperCase)
+                return request.getFieldType().parse(request.getValue().toString().toUpperCase());
+            else
+                return request.getFieldType().parse(request.getValue().toString());
+        }catch (Exception e){
+            throw new InvalidDataTypeException();
+        }
+    }
+
+    public Object parseValueTo(FilterRequest request){
+        try {
+            return request.getFieldType().parse(request.getValueTo().toString());
+        }catch (Exception e){
+            throw new InvalidDataTypeException();
+        }
     }
 
 }
