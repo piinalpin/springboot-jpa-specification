@@ -78,7 +78,7 @@ public enum Operator {
         try {
             return root.get(request.getKey());
         }catch (Exception e){
-            throw new KeyNotFoundException();
+            throw new KeyNotFoundException(request.getKey());
         }
     }
 
